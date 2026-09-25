@@ -113,6 +113,84 @@ class GuiTestCase(unittest.TestCase):
         self.assertIn("Halcyon [222]", text)
         self.assertEqual(len(self.app.songs["Arcaea"]), 5)
 
+    def test_layout_uses_grid_with_one_weighted_root_row(self):
+        """Regression guard for the squashed layout in the first screenshot.
+
+        Everything was packed, so a tall detail panel pushed the notebook off the
+        bottom of the window. The window must now be one grid: the body row
+        weighted (it absorbs any shortfall) and the notebook/status rows not.
+        """
+        root_grids = [call for widget in self.root._children
+                      for call in getattr(widget, "geometry_calls", [])
+                      if call[0] == "grid"]
+        self.assertTrue(root_grids, "root children should be gridded")
+
+        # every root child that is mapped must be on the grid, not packed
+        for widget in self.root._children:
+            kinds = {call[0] for call in getattr(widget, "geometry_calls", [])}
+            self.assertNotIn("pack", kinds,
+                             f"{type(widget).__name__} mixes pack with the root's grid layout")
+
+        rows = {call[1].get("row") for call in root_grids}
+        self.assertIn(0, rows)   # toolbar
+        self.assertIn(1, rows)   # connection bar
+        self.assertIn(2, rows)   # body
+        self.assertIn(3, rows)   # notebook
+        self.assertIn(4, rows)   # status bar
+        # the notebook must never be the widget that gets squeezed
+        self.assertEqual(self.root.rowweight(3), 0,
+                         "the notebook row must not absorb space (it would be clipped)")
+        self.assertEqual(self.root.rowweight(2), 1,
+                         "the body row must be the weighted one")
+        self.assertGreaterEqual(self.root.minsize_height, 640)
+
+    def test_every_visible_widget_was_laid_out(self):
+        """No widget may be created and never placed (invisible dead UI)."""
+        unplaced = []
+
+        def walk(widget, path):
+            container = type(widget).__name__
+            for child in getattr(widget, "_children", []) or []:
+                calls = getattr(child, "geometry_calls", [])
+                mapped = bool(child.state.get("mapped")) or child.state.get("tab")
+                if not calls and not mapped:
+                    unplaced.append(f"{path}/{container}.{type(child).__name__}")
+                walk(child, f"{path}/{container}")
+
+        walk(self.root, "")
+        self.assertEqual(unplaced, [], f"widgets never placed anywhere: {unplaced}")
+
+    def test_right_panel_options_are_reachable(self):
+        self.assertTrue(self.app.var_verify.get(), "checksum verification should default on")
+        # the combobox drives the worker count, and _sync_options must accept a string
+        self.app.workers_var.set("8")
+        self.app._sync_options()
+        self.assertEqual(self.app.cfg.workers, 8)
+        self.app.workers_var.set("nonsense")
+        self.app._sync_options()
+        self.assertEqual(self.app.cfg.workers, 8, "bad input must not corrupt the setting")
+
+    def test_tree_details_column_is_populated(self):
+        """The second column should carry the useful bits, not sit empty."""
+        self.pump(lambda: len(self.app.dlcs) == 3, what="scan")
+        arcaea = self.app.node_index["dlc:Arcaea"]
+        self.assertIn("songs", str(self.app.tree.item(arcaea, "values")))
+
+        song_node = self.app.tree.find("Grievous Lady")
+        self.assertEqual(str(self.app.tree.item(song_node, "values")[0]), "Chart and OGG")
+
+        # folder sizes arrive asynchronously from the Worker's stats endpoint
+        def folder_shows_a_size():
+            row = next((i for i, info in self.app.tree.all_nodes().items()
+                        if info["text"] == "Gears"), None)
+            if row is None:
+                return False
+            return any(unit in str(self.app.tree.item(row, "values"))
+                       for unit in ("B", "KB", "MB", "GB")) and "..." not in \
+                str(self.app.tree.item(row, "values"))
+
+        self.pump(folder_shows_a_size, seconds=20, what="folder size to arrive")
+
     def test_no_unknown_widget_calls(self):
         """Guards against typos in Tk method names: the stub records these."""
         self.pump(lambda: len(self.app.dlcs) == 3, what="scan")
@@ -264,6 +342,19 @@ class GuiTestCase(unittest.TestCase):
         self.assertIn("0 downloaded", self.app.numbers.cget("text"))
         self.assertIn("already present", self.app.numbers.cget("text"))
 
+    def test_first_dlc_is_opened_and_selected_after_scan(self):
+        """A fresh window must show something useful, not just collapsed rows."""
+        self.assertEqual(len(self.app.tree.selection()), 1,
+                         "the first DLC should be selected after connecting")
+        selected = self.app.tree.selection()[0]
+        self.assertTrue(self.app.tree.item(selected, "open"),
+                        "the first DLC should be expanded so its songs are visible")
+        self.assertIn("Arcaea", self.app.tree.item(selected, "text"))
+        self.assertIn("Arcaea", self.app.selection_label.cget("text"))
+        # and because it is a DLC, the DLC actions are usable straight away
+        self.assertTrue(self.app._selected_dlcs())
+        self.assertEqual(DIALOGS.showinfo.calls, [])
+
     def test_filter_hides_unrelated_nodes(self):
         self.pump(lambda: len(self.app.dlcs) == 3, what="scan")
         before = len(self.app.tree.get_children())
@@ -307,7 +398,8 @@ class GuiTestCase(unittest.TestCase):
             self.pump(lambda: not self.app.manager.busy, what="rescan")
             node = self.app.tree.find("Nine Point Eight")
             self.assertIsNotNone(node)
-            self.assertIn("no chart folder", str(self.app.tree.item(node, "text")))
+            details = self.app.tree.item(node, "values")
+            self.assertIn("no chart folder", str(details), "the details column should flag it")
 
             self.app.tree.selection_set([node])
             self.app._on_select()

@@ -147,28 +147,52 @@ class ConnectionBar(ttk.Frame):
             row=1, column=1, sticky="ew", padx=(0, 12), pady=2)
 
         buttons = ttk.Frame(self.body, style="Panel.TFrame")
-        buttons.grid(row=2, column=0, columnspan=2, sticky="e", padx=12, pady=10)
+        buttons.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=10)
+        buttons.columnconfigure(0, weight=1)
+        ttk.Button(buttons, text="How do I get these?", command=self._help).grid(
+            row=0, column=0, sticky="w")
         ttk.Button(buttons, text="Test && connect", style="Accent.TButton",
-                   command=self._connect).pack(side="left", padx=(0, 8))
-        ttk.Button(buttons, text="Save to config", command=self._save).pack(side="left")
+                   command=self._connect).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(buttons, text="Save to config", command=self._save).grid(row=0, column=2)
         ttk.Label(self.body, text="The token is stored obfuscated in config.json "
                                   "(read-only, prefix-scoped on the server).",
                   style="PanelDim.TLabel", wraplength=560, justify="left").grid(
             row=3, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10))
 
+        self.body.pack(fill="x")   # built visible...
+        self.visible = True
+        self.set_visible(False)    # ...but starts collapsed
+
     def setup(self, cfg: core.Config):
         self.url_var.set(cfg.api_url)
         self.token_var.set(cfg.token)
 
-    def toggle(self, show: Optional[bool] = None):
-        self.visible = (not self.visible) if show is None else show
+    def set_visible(self, show: bool):
+        self.visible = bool(show)
         if self.visible:
             self.body.pack(fill="x")
         else:
             self.body.pack_forget()
 
+    def toggle(self, show: Optional[bool] = None):
+        self.set_visible((not self.visible) if show is None else show)
+
     def values(self) -> Tuple[str, str]:
         return self.url_var.get().strip(), self.token_var.get().strip()
+
+    def _help(self):
+        messagebox.showinfo(f"{core.APP_NAME} - connecting",
+                            "To connect this app you need:\n\n"
+                            "  1. worker/worker.js deployed to Cloudflare, with an R2 binding\n"
+                            "     named BUCKET (see worker/README.md - about two minutes)\n"
+                            "  2. The Worker URL, e.g.\n"
+                            "     https://djmax-stash-api.you.workers.dev\n"
+                            "  3. An app token: the APP_TOKEN secret you set with\n"
+                            "     'wrangler secret put APP_TOKEN'\n\n"
+                            "Paste both above and press 'Test & connect', then 'Save to config'.\n\n"
+                            "Command line checks:\n"
+                            "  python djmax_stash_cli.py doctor --api-url ... --token ...\n"
+                            "  python djmax_stash.py --selftest --api-url ... --token ...")
 
     def _connect(self):
         self.on_connect(*self.values())
@@ -247,8 +271,8 @@ class StashApp:
     # -- construction -------------------------------------------------------
     def _build_window(self):
         self.root.title(f"{core.APP_NAME} {core.APP_VERSION}")
-        self.root.geometry("1040x700")
-        self.root.minsize(880, 560)
+        self.root.geometry("1060x780")
+        self.root.minsize(940, 660)
         self.root.configure(bg=DARK["bg"])
         icon = app_icon()
         if icon:
@@ -288,8 +312,43 @@ class StashApp:
                   background=[("active", DARK["accent_hot"]), ("disabled", DARK["border"])])
         style.configure("TEntry", fieldbackground=DARK["bg_alt"], foreground=DARK["fg"],
                         insertcolor=DARK["fg"], bordercolor=DARK["border"])
-        style.configure("TCheckbutton", background=DARK["bg"], foreground=DARK["fg"])
-        style.map("TCheckbutton", background=[("active", DARK["bg"])])
+        # TCheckbutton: the clam theme's default indicator is near-invisible on a
+        # dark background, so drive indicatorcolor explicitly -- a filled accent
+        # square when ticked, an outlined dark square when not.
+        style.configure("TCheckbutton", background=DARK["bg"], foreground=DARK["fg"],
+                        indicatorcolor=DARK["bg_alt"], focuscolor=DARK["accent"],
+                        padding=(2, 3))
+        style.map("TCheckbutton",
+                  background=[("active", DARK["bg"])],
+                  foreground=[("disabled", DARK["fg_dim"])],
+                  indicatorcolor=[("disabled", DARK["border"]),
+                                  ("selected", DARK["accent"]),
+                                  ("!selected", DARK["bg_alt"])],
+                  bordercolor=[("selected", DARK["accent"])])
+        style.configure("Panel.TCheckbutton", background=DARK["bg_alt"], foreground=DARK["fg"],
+                        indicatorcolor=DARK["bg"], focuscolor=DARK["accent"],
+                        padding=(2, 3))
+        style.map("Panel.TCheckbutton",
+                  background=[("active", DARK["bg_alt"])],
+                  indicatorcolor=[("disabled", DARK["border"]),
+                                  ("selected", DARK["accent"]),
+                                  ("!selected", DARK["bg"])],
+                  bordercolor=[("selected", DARK["accent"])])
+        # TCombobox replaces the Spinbox: clam's spin arrows render as black
+        # blocks on dark themes, whereas the combobox dropdown is reliable.
+        style.configure("TCombobox", fieldbackground=DARK["bg_alt"], background=DARK["bg_alt"],
+                        foreground=DARK["fg"], arrowcolor=DARK["fg"],
+                        bordercolor=DARK["border"], lightcolor=DARK["bg_alt"],
+                        darkcolor=DARK["bg_alt"], selectbackground=DARK["bg_alt"],
+                        selectforeground=DARK["fg"], padding=(4, 2))
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", DARK["bg_alt"])],
+                  foreground=[("readonly", DARK["fg"])],
+                  background=[("active", DARK["bg_sel"])])
+        self.root.option_add("*TCombobox*Listbox.background", DARK["bg_alt"])
+        self.root.option_add("*TCombobox*Listbox.foreground", DARK["fg"])
+        self.root.option_add("*TCombobox*Listbox.selectBackground", DARK["bg_sel"])
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
         style.configure("Treeview", background=DARK["bg_alt"], fieldbackground=DARK["bg_alt"],
                         foreground=DARK["fg"], rowheight=24, borderwidth=0,
                         font=FONT_UI)
@@ -301,6 +360,16 @@ class StashApp:
         style.map("Treeview.Heading", background=[("active", DARK["bg_alt"])])
         style.configure("TProgressbar", background=DARK["accent"], troughcolor=DARK["bg_alt"],
                         borderwidth=0, thickness=14)
+        for orient in ("Vertical", "Horizontal"):
+            style.configure(f"{orient}.TScrollbar", background=DARK["bg_alt"],
+                            troughcolor=DARK["bg"], bordercolor=DARK["bg"],
+                            arrowcolor=DARK["fg_dim"], darkcolor=DARK["bg_alt"],
+                            lightcolor=DARK["bg_alt"], gripcount=0)
+            style.map(f"{orient}.TScrollbar",
+                      background=[("active", DARK["bg_sel"]), ("pressed", DARK["accent"])],
+                      arrowcolor=[("active", DARK["fg"])])
+        style.configure("TSpinbox", fieldbackground=DARK["bg_alt"], foreground=DARK["fg"],
+                        arrowcolor=DARK["fg"], bordercolor=DARK["border"])
         style.configure("TNotebook", background=DARK["bg"], borderwidth=0)
         style.configure("TNotebook.Tab", background=DARK["bg_alt"], foreground=DARK["fg_dim"],
                         padding=(14, 7))
@@ -310,9 +379,16 @@ class StashApp:
         style.configure("TSeparator", background=DARK["border"])
 
     def _build_widgets(self):
+        # The window is laid out with grid: only the middle row (the tree +
+        # detail panel) has weight, so when the window is small Tk shrinks that
+        # row instead of clipping the notebook or the status bar off the bottom.
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(2, weight=1)   # row 0 toolbar, 1 connection, 2 body,
+                                              # 3 notebook, 4 status bar
+
         # ---- top toolbar
         toolbar = ttk.Frame(self.root, style="Bar.TFrame", padding=(10, 8))
-        toolbar.pack(fill="x", side="top")
+        toolbar.grid(row=0, column=0, sticky="ew")
 
         ttk.Label(toolbar, text="DJMAX STASH", style="Head.TLabel").pack(side="left",
                                                                         padx=(4, 16))
@@ -324,22 +400,21 @@ class StashApp:
         self.cancel_btn.pack(side="left")
 
         search_box = ttk.Frame(toolbar, style="Bar.TFrame")
-        search_box.pack(side="right")
+        search_box.pack(side="right", padx=(0, 10))
         ttk.Label(search_box, text="Filter", style="Dim.TLabel").pack(side="left", padx=(0, 6))
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self._apply_filter())
-        ttk.Entry(search_box, textvariable=self.search_var, width=28).pack(side="left")
+        ttk.Entry(search_box, textvariable=self.search_var, width=24).pack(side="left")
 
         # ---- connection bar
         self.connection = ConnectionBar(self.root, self._connect_with, self._save_connection)
-        self.connection.pack(fill="x")
+        self.connection.grid(row=1, column=0, sticky="ew")
         self.connection.setup(self.cfg)
-        if not self.cfg.api_url:
-            self.connection.toggle(True)
+        self.connection.set_visible(not self.cfg.api_url)
 
         # ---- body: tree + detail
         body = ttk.Frame(self.root, padding=(10, 8))
-        body.pack(fill="both", expand=True)
+        body.grid(row=2, column=0, sticky="nsew")
         body.columnconfigure(0, weight=3, minsize=380)
         body.columnconfigure(1, weight=2, minsize=280)
         body.rowconfigure(0, weight=1)
@@ -349,9 +424,12 @@ class StashApp:
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
 
-        self.tree = ttk.Treeview(left, selectmode="extended", show="tree headings")
+        self.tree = ttk.Treeview(left, selectmode="extended", show="tree headings",
+                                 columns=("info",))
         self.tree.heading("#0", text="DLC  /  Songs", anchor="w")
-        self.tree.column("#0", width=330, stretch=True)
+        self.tree.heading("info", text="Chart folder  /  Size", anchor="w")
+        self.tree.column("#0", width=330, stretch=True, minwidth=200)
+        self.tree.column("info", width=200, stretch=False, minwidth=120)
         self.tree.grid(row=0, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewOpen>>", self._on_expand)
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
@@ -369,7 +447,6 @@ class StashApp:
         right = ttk.Frame(body, style="Panel.TFrame", padding=12)
         right.grid(row=0, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(2, weight=1)
 
         ttk.Label(right, text="Selection", style="Big.TLabel").grid(row=0, column=0, sticky="w")
         self.selection_label = ttk.Label(right, text="Nothing selected", style="PanelDim.TLabel",
@@ -377,52 +454,68 @@ class StashApp:
         self.selection_label.grid(row=1, column=0, sticky="w", pady=(4, 10))
 
         quick = ttk.Frame(right, style="Panel.TFrame")
-        quick.grid(row=2, column=0, sticky="new")
-        for text, command, style in (
+        quick.grid(row=2, column=0, sticky="ew")
+        quick.columnconfigure(0, weight=1)
+        for index, (text, command, style) in enumerate((
             ("Download songs", self.act_download_songs, "Accent.TButton"),
             ("Download assets", self.act_download_assets, "TButton"),
             ("Download DLC (assets + songs)", self.act_download_dlc, "TButton"),
             ("Download whole song folders (with MV)", self.act_download_full_song, "TButton"),
             ("Download selected folder", self.act_download_folder, "TButton"),
-        ):
-            ttk.Button(quick, text=text, command=command, style=style).pack(fill="x", pady=2)
+        )):
+            ttk.Button(quick, text=text, command=command, style=style).grid(
+                row=index, column=0, sticky="ew", pady=2)
 
-        opts = ttk.Frame(right, style="Panel.TFrame")
-        opts.grid(row=3, column=0, sticky="ew", pady=(14, 4))
+        self.folder = FolderPicker(right, "Save to", on_change=lambda _v: self._sync_options(),
+                                   panel=True)
+        self.folder.frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+
         self.var_overwrite = tk.BooleanVar(value=False)
         self.var_verify = tk.BooleanVar(value=self.cfg.verify_md5)
         self.var_resume = tk.BooleanVar(value=self.cfg.resume)
         self.var_open = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opts, text="Re-download existing files", variable=self.var_overwrite,
-                        command=self._sync_options).pack(anchor="w")
-        ttk.Checkbutton(opts, text="Verify checksums", variable=self.var_verify,
-                        command=self._sync_options).pack(anchor="w")
-        ttk.Checkbutton(opts, text="Resume partial downloads", variable=self.var_resume,
-                        command=self._sync_options).pack(anchor="w")
-        ttk.Checkbutton(opts, text="Open folder when finished", variable=self.var_open).pack(anchor="w")
 
         workers = ttk.Frame(right, style="Panel.TFrame")
-        workers.grid(row=4, column=0, sticky="ew", pady=(6, 0))
-        ttk.Label(workers, text="Parallel downloads", style="PanelDim.TLabel").pack(side="left")
-        self.workers_var = tk.IntVar(value=self.cfg.workers)
-        spin = ttk.Spinbox(workers, from_=1, to=16, width=4, textvariable=self.workers_var,
-                           command=self._sync_options)
-        spin.pack(side="right")
-        spin.bind("<FocusOut>", lambda _e: self._sync_options())
+        workers.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        workers.columnconfigure(0, weight=1)
+        ttk.Label(workers, text="Parallel downloads", style="PanelDim.TLabel").grid(
+            row=0, column=0, sticky="w")
+        self.workers_var = tk.StringVar(value=str(self.cfg.workers))
+        combo = ttk.Combobox(workers, textvariable=self.workers_var, width=3,
+                             state="readonly", values=[str(i) for i in range(1, 17)])
+        combo.grid(row=0, column=1, sticky="e")
+        combo.bind("<<ComboboxSelected>>", lambda _e: self._sync_options())
 
-        self.folder = FolderPicker(right, "Save to", on_change=lambda _v: self._sync_options(),
-                                   panel=True)
-        self.folder.frame.grid(row=5, column=0, sticky="ew", pady=(10, 0))
-        self.folder.set(self.cfg.output_dir)
+        # keep the panel content pinned to the top when the window is tall
+        right.rowconfigure(6, weight=1)
 
         # ---- notebook: transfers / activity
         book = ttk.Notebook(self.root)
-        book.pack(fill="both", side="bottom", padx=10, pady=(0, 6))
+        book.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 6))
 
         self.transfer_tab = ttk.Frame(book, padding=12)
         self.activity_tab = ttk.Frame(book, padding=(0, 0))
+        self.options_tab = ttk.Frame(book, padding=12)
         book.add(self.transfer_tab, text="Transfers")
         book.add(self.activity_tab, text="Activity")
+        book.add(self.options_tab, text="Options")
+
+        self.options_tab.columnconfigure(1, weight=1)
+        for index, (text, var, command, help_text) in enumerate((
+            ("Re-download existing files", self.var_overwrite, self._sync_options,
+             "ignore files already on disk and fetch them again"),
+            ("Verify checksums", self.var_verify, self._sync_options,
+             "compare every finished file against the bucket's MD5 (recommended)"),
+            ("Resume partial downloads", self.var_resume, self._sync_options,
+             "continue a stopped transfer instead of starting the file over"),
+            ("Open folder when finished", self.var_open, None,
+             "launch the save folder after a download completes"),
+        )):
+            ttk.Checkbutton(self.options_tab, text=text, variable=var,
+                            command=command).grid(row=index, column=0, sticky="w",
+                                                  pady=2, padx=(0, 14))
+            ttk.Label(self.options_tab, text=help_text,
+                      style="Dim.TLabel").grid(row=index, column=1, sticky="w", pady=2)
         self.transfer_tab.columnconfigure(0, weight=1)
 
         self.big_label = ttk.Label(self.transfer_tab, text="Idle",
@@ -454,7 +547,7 @@ class StashApp:
 
         # ---- status bar
         self.status = StatusBar(self.root, style="Bar.TFrame")
-        self.status.pack(fill="x", side="bottom")
+        self.status.grid(row=4, column=0, sticky="ew")
 
         self.root.bind("<Control-a>", lambda _e: self._select_all())
         self.root.bind("<Control-A>", lambda _e: self._select_all())
@@ -483,7 +576,7 @@ class StashApp:
         try:
             self.cfg.workers = max(1, min(16, int(self.workers_var.get())))
         except (tk.TclError, ValueError):
-            self.workers_var.set(self.cfg.workers)
+            self.workers_var.set(str(self.cfg.workers))
         self.cfg.verify_md5 = bool(self.var_verify.get())
         self.cfg.resume = bool(self.var_resume.get())
         self.cfg.output_dir = self.folder.get() or self.cfg.output_dir
@@ -618,15 +711,16 @@ class StashApp:
             for warning in warnings:
                 self._log("warn", warning)
             self._log("ok", f"Scan complete: {len(self.dlcs)} DLC(s)")
+            self._select_first_dlc()
             return
 
         if kind == "size":
+            size_text = (core.human_bytes(event["bytes"])
+                         if event.get("bytes") is not None else "?")
             for item_id, (node_kind, payload) in self.tree_nodes.items():
-                if node_kind in ("dlc", "folder") and getattr(payload, "prefix", None) == event["prefix"]:
-                    size_text = core.human_bytes(event["bytes"]) if event.get("bytes") is not None else "?"
-                    label = self.tree.item(item_id, "text")
-                    base = label.split("   [")[0]
-                    self.tree.item(item_id, text=f"{base}   [{size_text}]")
+                if node_kind in ("dlc", "folder") and \
+                        getattr(payload, "prefix", None) == event["prefix"]:
+                    self.tree.item(item_id, values=(size_text,))
             return
 
         if kind == "plan_start":
@@ -683,6 +777,19 @@ class StashApp:
 
         if kind == "search_results":
             return  # the filter box does live filtering; this is for API users
+
+    def _select_first_dlc(self):
+        """Open and select the first DLC so a fresh window isn't a blank list."""
+        if self.tree.selection():
+            return
+        children = self.tree.get_children()
+        if not children:
+            return
+        first = children[0]
+        self.tree.item(first, open=True)
+        self.tree.selection_set([first])
+        self.tree.see(first)
+        self._on_select()
 
     # -- tree ---------------------------------------------------------------
     def _folders_for(self, dlc: core.Dlc) -> List[core.FolderInfo]:
@@ -747,19 +854,20 @@ class StashApp:
         self._clear_children(node)
 
         loaded = self.song_loaded.get(dlc.name, False)
+        self.tree.item(node, values=(f"{len(songs)} songs" if loaded else "",))
         songs_node = self._insert(
             node,
-            f"{self.cfg.song_dir}  ({len(songs)})" if loaded
-            else f"{self.cfg.song_dir}  (click to load)",
-            "song_container" if loaded else "lazy_songs", dlc, tags=("folder",))
+            f"{self.cfg.song_dir}" if loaded else f"{self.cfg.song_dir}  (click to load)",
+            "song_container" if loaded else "lazy_songs", dlc, tags=("folder",),
+            values=(str(len(songs)) if loaded else "",))
         self.node_index[f"songs:{dlc.name}"] = songs_node
 
         if loaded:
             for song in songs:
-                marker = "" if song.has_chart_folder else "   (no chart folder)"
-                self._insert(songs_node, f"{song.title}{marker}", "song", song,
+                self._insert(songs_node, song.title, "song", song,
                              tags=() if song.has_chart_folder else ("missing",),
-                             values=(song.chart_dir or "",))
+                             values=(song.chart_dir if song.has_chart_folder
+                                     else "no chart folder",))
             if not songs:
                 self._insert(songs_node, "(no songs found)", "dim", None, tags=("dim",))
         else:
@@ -768,7 +876,8 @@ class StashApp:
         for folder in folders:
             if folder.is_song_container:
                 continue
-            child = self._insert(node, folder.name, "folder", folder, tags=("folder",))
+            child = self._insert(node, folder.name, "folder", folder, tags=("folder",),
+                                 values=("...",))
             self._insert(child, "Loading...", "dim", None, tags=("dim",))
             self.manager.load_size(folder.prefix, f"folder:{dlc.name}:{folder.name}")
 
@@ -805,8 +914,8 @@ class StashApp:
                          tags=("folder",))
         for key, size in (event.get("files") or [])[:400]:
             name = key.rsplit("/", 1)[-1]
-            self._insert(node, f"{name}   [{core.human_bytes(size)}]", "prefix", key,
-                         tags=("dim",))
+            self._insert(node, name, "prefix", key, tags=("dim",),
+                         values=(core.human_bytes(size),))
         if not self.node_children.get(node):
             self._insert(node, "(empty)", "dim", None, tags=("dim",))
 
@@ -1193,8 +1302,11 @@ def main(argv=None) -> int:
         return 3
 
     try:
-        root.call("tk", "scaling", 1.15)
-    except tk.TclError:
+        # Leave Tk's DPI scaling alone (it follows the OS, so 125%/150% displays
+        # get the right text size); only nudge it up if the system reports none.
+        if float(root.call("tk", "scaling")) <= 1.0:
+            root.call("tk", "scaling", 1.2)
+    except (tk.TclError, ValueError, TypeError):
         pass
     StashApp(root, cfg, autoconnect=not args.no_autoconnect)
     root.mainloop()

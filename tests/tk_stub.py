@@ -100,32 +100,50 @@ class Widget:
         self.unknown: List[str] = []
         self.bindings: Dict[str, Callable] = {}
         self.state = {"mapped": False}
+        self.geometry_calls: List[tuple] = []
         if master is not None and hasattr(master, "_children"):
             master._children.append(self)
 
     # geometry
     def pack(self, **kw):
         self.state["mapped"] = True
+        self.geometry_calls.append(("pack", dict(kw)))
         return self
 
     def pack_forget(self, **kw):
         self.state["mapped"] = False
+        self.geometry_calls.append(("pack_forget", {}))
 
     def grid(self, **kw):
         self.state["mapped"] = True
+        self.geometry_calls.append(("grid", dict(kw)))
         return self
 
     def grid_forget(self, **kw):
         self.state["mapped"] = False
+        self.geometry_calls.append(("grid_forget", {}))
 
     def place(self, **kw):
         self.state["mapped"] = True
+        self.geometry_calls.append(("place", dict(kw)))
 
     def columnconfigure(self, *a, **kw):
-        pass
+        weights = getattr(self, "_col_weights", {})
+        if a:
+            weights[int(a[0])] = kw.get("weight", weights.get(int(a[0]), 0))
+        self._col_weights = weights
 
     def rowconfigure(self, *a, **kw):
-        pass
+        weights = getattr(self, "_row_weights", {})
+        if a:
+            weights[int(a[0])] = kw.get("weight", weights.get(int(a[0]), 0))
+        self._row_weights = weights
+
+    def rowweight(self, index):
+        return getattr(self, "_row_weights", {}).get(index, 0)
+
+    def colweight(self, index):
+        return getattr(self, "_col_weights", {}).get(index, 0)
 
     def configure(self, *a, **kw):
         self.kw.update(kw)
@@ -251,6 +269,36 @@ class Spinbox(Entry):
     pass
 
 
+class Combobox(Entry):
+    """Enough of ttk.Combobox for the app: values, current(), set(), events."""
+
+    def __init__(self, master=None, **kw):
+        super().__init__(master, **kw)
+        self.values = list(kw.get("values", []))
+        self.state_value = kw.get("state", "normal")
+        if self.textvariable is not None and not self.textvariable.get() and self.values:
+            self.textvariable.set(self.values[0])
+
+    def current(self, index=None):
+        if index is None:
+            value = self.textvariable.get() if self.textvariable else ""
+            return self.values.index(value) if value in self.values else -1
+        self.set(self.values[index])
+
+    def set(self, value):
+        if self.textvariable is not None:
+            self.textvariable.set(value)
+
+    def configure(self, *a, **kw):
+        if "values" in kw:
+            self.values = list(kw["values"])
+        if "state" in kw:
+            self.state_value = kw["state"]
+        return super().configure(*a, **kw)
+
+    config = configure
+
+
 class Canvas(Widget):
     def __init__(self, master=None, **kw):
         super().__init__(master, **kw)
@@ -348,7 +396,7 @@ class Treeview(Widget):
         super().__init__(master, **kw)
         self._items: Dict[str, dict] = {}
         self._order: List[str] = []
-        self._children: Dict[str, List[str]] = {"": []}
+        self._tree_children: Dict[str, List[str]] = {"": []}
         self._selected: List[str] = []
         self._focus = ""
         self._tags: Dict[str, dict] = {}
@@ -362,16 +410,16 @@ class Treeview(Widget):
             self._n += 1
             iid = f"I{self._n:04d}"
         parent = parent or ""
-        self._children.setdefault(parent, [])
+        self._tree_children.setdefault(parent, [])
         if index in ("end", "0", None) or str(index) == "end":
-            self._children[parent].append(iid)
+            self._tree_children[parent].append(iid)
         else:
             try:
-                self._children[parent].insert(int(index), iid)
+                self._tree_children[parent].insert(int(index), iid)
             except (ValueError, TypeError):
-                self._children[parent].append(iid)
+                self._tree_children[parent].append(iid)
         self._order.append(iid)
-        self._children.setdefault(iid, [])
+        self._tree_children.setdefault(iid, [])
         self._items[iid] = {
             "text": kw.get("text", ""),
             "values": kw.get("values", ()),
@@ -382,7 +430,7 @@ class Treeview(Widget):
         return iid
 
     def get_children(self, item=""):
-        return list(self._children.get(item or "", []))
+        return list(self._tree_children.get(item or "", []))
 
     def parent(self, item):
         return self._items.get(item, {}).get("parent", "")
@@ -392,11 +440,11 @@ class Treeview(Widget):
             for child in self.get_children(item):
                 self.delete(child)
             self._items.pop(item, None)
-            self._children.pop(item, None)
+            self._tree_children.pop(item, None)
             if item in self._order:
                 self._order.remove(item)
             parent = self._items.get(item, {}).get("parent")
-            for kids in self._children.values():
+            for kids in self._tree_children.values():
                 if item in kids:
                     kids.remove(item)
             if item in self._selected:
@@ -416,15 +464,15 @@ class Treeview(Widget):
         return item in self._items
 
     def move(self, item, parent, index="end"):
-        for kids in self._children.values():
+        for kids in self._tree_children.values():
             if item in kids:
                 kids.remove(item)
         parent = parent or ""
-        self._children.setdefault(parent, [])
+        self._tree_children.setdefault(parent, [])
         if index in ("end", "0", None):
-            self._children[parent].append(item)
+            self._tree_children[parent].append(item)
         else:
-            self._children[parent].insert(int(index), item)
+            self._tree_children[parent].insert(int(index), item)
         self._items[item]["parent"] = parent
 
     # Tk spells the same operation both ways
@@ -432,7 +480,7 @@ class Treeview(Widget):
 
     def detach(self, item):
         """Unmap an item but keep its parent, exactly like Tk does."""
-        for kids in self._children.values():
+        for kids in self._tree_children.values():
             if item in kids:
                 kids.remove(item)
 
@@ -492,6 +540,7 @@ class Notebook(Frame):
     def add(self, widget, **kw):
         self.tabs.append(widget)
         widget.kw.update(kw)
+        widget.state["tab"] = True
 
     def select(self):
         return self.tabs[0] if self.tabs else None
@@ -603,7 +652,11 @@ class Tk(Widget):
         self.geometry_text = spec
 
     def minsize(self, *a):
-        pass
+        if len(a) >= 2:
+            self.minsize_width, self.minsize_height = int(a[0]), int(a[1])
+        elif len(a) == 1 and isinstance(a[0], (tuple, list)):
+            self.minsize_width, self.minsize_height = int(a[0][0]), int(a[0][1])
+        return (getattr(self, "minsize_width", 0), getattr(self, "minsize_height", 0))
 
     def resizable(self, *a):
         pass
@@ -618,6 +671,9 @@ class Tk(Widget):
 
     def call(self, *a, **kw):
         return ""
+
+    def option_add(self, pattern=None, value=None, priority=None):
+        return None
 
     def destroy(self):
         pass
@@ -707,7 +763,8 @@ def install(dialog: Optional[Messagebox] = None, filedialog: Optional[Filedialog
     ttk = types.ModuleType("tkinter.ttk")
     for name, value in list(globals().items()):
         if name in ("Style", "Frame", "Label", "Button", "Entry", "Checkbutton", "Spinbox",
-                    "Notebook", "Progressbar", "Scrollbar", "Separator", "Treeview"):
+                    "Combobox", "Notebook", "Progressbar", "Scrollbar", "Separator",
+                    "Treeview"):
             setattr(ttk, name, value)
     ttk.Widget = Widget  # tkinter.ttk re-exports Widget
 

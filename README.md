@@ -46,6 +46,42 @@ already shared with them.
 
 ---
 
+## Connecting the app to your Cloudflare (2 minutes)
+
+You need three things, then it's a copy-paste:
+
+**1. Deploy the Worker** (this is the only part with a terminal):
+
+```bash
+npm install -g wrangler
+wrangler login
+cd worker
+cp wrangler.toml.example wrangler.toml     # set bucket_name + ALLOWED_PREFIX
+wrangler deploy                            # prints your Worker URL
+wrangler secret put APP_TOKEN              # invent a long random token
+```
+
+**2. Copy the two values** `wrangler` gave you:
+
+| What | Where it comes from | Looks like |
+|---|---|---|
+| API URL | the URL `wrangler deploy` printed | `https://djmax-stash-api.you.workers.dev` |
+| Token | whatever you typed at `wrangler secret put APP_TOKEN` | `k7f2...` (your choice) |
+
+**3. Paste them into the app**: click **Connection** at the top left → fill in
+API URL and Token → **Test & connect** → **Save to config**. The bar collapses
+and the DLC list loads. That's it — the values persist, so it's a one-time step.
+
+Check it worked: the status dot at the bottom goes green and says
+`Connected - N DLC(s)`. If not, the Activity tab says why (401 = token typo,
+403 = prefix outside `ALLOWED_PREFIX`, "could not reach" = wrong URL).
+
+Prefer the command line? Same two values:
+
+```bash
+python djmax_stash_cli.py doctor --api-url https://your-worker.workers.dev --token YOUR_TOKEN
+```
+
 ## Setup (you, once)
 
 ```bash
@@ -100,7 +136,8 @@ In the window:
   buttons on the right or the Download menu.
 * The **Filter** box hides anything that doesn't match (it searches DLC names,
   folders and song titles).
-* **Transfers** shows live progress, speed and ETA; **Activity** is a log.
+* **Transfers** shows live progress, speed and ETA; **Activity** is a log;
+  **Options** holds re-download / checksum / resume / open-folder preferences.
 * Cancel is always available — partial files are kept as `.part` and resume
   automatically next time.
 * Every download is MD5-verified against the bucket, so a truncated file is
@@ -165,7 +202,8 @@ speed/ETA readouts move.
 | A song shows "no chart folder" | that song has no `Chart and OGG`; the app downloads the whole song folder instead |
 
 Run `python djmax_stash.py --selftest` to check the whole chain without opening
-a window, and check the Cloudflare Worker logs (`wrangler tail`) if the app says
+a window (it uses the same config, so `--selftest --api-url ... --token ...`
+works as a connection test), and check the Cloudflare Worker logs (`wrangler tail`) if the app says
 the connection failed.
 
 ## Layout of this repo
@@ -180,13 +218,13 @@ worker/wrangler.toml.example
 tools/mock_worker.py    local Worker stand-in, same API
 tools/make_demo_bucket.py
 tools/build_release.py  package a build for friends (folder / zip / .exe)
-tests/                  70 python tests + 29 worker checks
+tests/                  75 python tests + 29 worker checks
 ```
 
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -t .   # python: core + GUI (70 tests)
+python -m unittest discover -s tests -t .   # python: core + GUI (75 tests)
 node tests/test_worker.mjs                  # the Worker against a fake R2 binding
 ```
 
