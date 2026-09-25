@@ -72,6 +72,13 @@ wrangler secret put APP_TOKEN              # invent a long random token
 API URL and Token → **Test & connect** → **Save to config**. The bar collapses
 and the DLC list loads. That's it — the values persist, so it's a one-time step.
 
+**4. If your folders aren't called `djmax/By_DLC/…`**, click **Detect layout** in
+the same bar: it reads the bucket, fills in the root prefix / DLC folder / song
+folder names, saves them and reloads. Nothing to edit by hand. (For a bucket
+whose files sit at the very top, or one that uses `Chart & OGG`, that's the
+button to press.) Still stuck? `python djmax_stash_cli.py doctor --api-url … --token …`
+prints what it found.
+
 Check it worked: the status dot at the bottom goes green and says
 `Connected - N DLC(s)`. If not, the Activity tab says why (401 = token typo,
 403 = prefix outside `ALLOWED_PREFIX`, "could not reach" = wrong URL).

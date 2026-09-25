@@ -125,10 +125,11 @@ class StatusBar(ttk.Frame):
 class ConnectionBar(ttk.Frame):
     """URL + token entry, with a Test button. Collapsed by default."""
 
-    def __init__(self, master, on_connect, on_save, **kwargs):
+    def __init__(self, master, on_connect, on_save, on_detect=None, **kwargs):
         super().__init__(master, **kwargs)
         self.on_connect = on_connect
         self.on_save = on_save
+        self.on_detect = on_detect
         self.visible = False
 
         self.url_var = tk.StringVar()
@@ -151,11 +152,15 @@ class ConnectionBar(ttk.Frame):
         buttons.columnconfigure(0, weight=1)
         ttk.Button(buttons, text="How do I get these?", command=self._help).grid(
             row=0, column=0, sticky="w")
+        if self.on_detect:
+            ttk.Button(buttons, text="Detect layout", command=self._detect).grid(
+                row=0, column=1, padx=(0, 8))
         ttk.Button(buttons, text="Test && connect", style="Accent.TButton",
-                   command=self._connect).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(buttons, text="Save to config", command=self._save).grid(row=0, column=2)
+                   command=self._connect).grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(buttons, text="Save to config", command=self._save).grid(row=0, column=3)
         ttk.Label(self.body, text="The token is stored obfuscated in config.json "
-                                  "(read-only, prefix-scoped on the server).",
+                                  "(read-only, prefix-scoped on the server). "
+                                  "'Detect layout' works out your folder names automatically.",
                   style="PanelDim.TLabel", wraplength=560, justify="left").grid(
             row=3, column=0, columnspan=2, sticky="w", padx=12, pady=(0, 10))
 
@@ -193,6 +198,10 @@ class ConnectionBar(ttk.Frame):
                             "Command line checks:\n"
                             "  python djmax_stash_cli.py doctor --api-url ... --token ...\n"
                             "  python djmax_stash.py --selftest --api-url ... --token ...")
+
+    def _detect(self):
+        if self.on_detect:
+            self.on_detect(*self.values())
 
     def _connect(self):
         self.on_connect(*self.values())
@@ -407,7 +416,8 @@ class StashApp:
         ttk.Entry(search_box, textvariable=self.search_var, width=24).pack(side="left")
 
         # ---- connection bar
-        self.connection = ConnectionBar(self.root, self._connect_with, self._save_connection)
+        self.connection = ConnectionBar(self.root, self._connect_with, self._save_connection,
+                                        on_detect=self._detect_layout)
         self.connection.grid(row=1, column=0, sticky="ew")
         self.connection.setup(self.cfg)
         self.connection.set_visible(not self.cfg.api_url)
@@ -601,6 +611,31 @@ class StashApp:
         except OSError as exc:
             messagebox.showerror(core.APP_NAME, f"Could not save settings:\n{exc}")
 
+    def _detect_layout(self, url: str, token: str):
+        """Work out root_prefix / dlc_dir / song_dir by looking at the bucket."""
+        self.cfg.api_url = url or self.cfg.api_url
+        self.cfg.token = token or self.cfg.token
+        if not self.cfg.api_url:
+            messagebox.showinfo(core.APP_NAME, "Fill in the API URL and token first.")
+            return
+        if self.manager.busy:
+            messagebox.showinfo(core.APP_NAME, "Still busy with the previous task.")
+            return
+        self._log("info", f"Detecting layout on {self.cfg.api_url} ...")
+        self._status("busy", "Detecting layout...", self.cfg.api_url)
+
+        def job():
+            try:
+                probe = core.Config(api_url=self.cfg.api_url, token=self.cfg.token,
+                                    root_prefix="", dlc_dir="", song_dir="").normalised()
+                result = core.auto_detect_layout(probe, core.StashAPI(probe))
+                self.events.put({"type": "layout_detected", "ok": result["ok"],
+                                 "detected": result["config"], "notes": result["notes"]})
+            except core.StashError as exc:
+                self.events.put({"type": "layout_detected", "ok": False, "notes": [str(exc)]})
+
+        threading.Thread(target=job, daemon=True, name="detect-layout").start()
+
     def connect(self, silent: bool = False):
         self._sync_options()
         if not self.cfg.api_url:
@@ -662,6 +697,41 @@ class StashApp:
             if event.get("hint"):
                 self._log("dim", event["hint"])
             self.connection.toggle(True)
+            return
+
+        if kind == "layout_detected":
+            notes = event.get("notes") or []
+            for note in notes:
+                self._log("dim" if event.get("ok") else "warn", f"  {note}")
+            if not event.get("ok"):
+                self._status("err", "Layout not detected", "")
+                messagebox.showwarning(
+                    core.APP_NAME,
+                    "Could not work out the bucket layout.\n\n"
+                    + "\n".join(notes)
+                    + "\n\nCheck that ALLOWED_PREFIX in wrangler.toml points at the "
+                      "right folder, and that the bucket holds "
+                      "<DLC folder>/<DLC name>/<Songs>/...")
+                return
+            detected = event["detected"]
+            self.cfg.root_prefix = detected.root_prefix
+            self.cfg.dlc_dir = detected.dlc_dir
+            self.cfg.song_dir = detected.song_dir
+            self.connection.setup(self.cfg)
+            self._log("ok", f"Layout: {self.cfg.root_prefix}<DLC folder>/<DLC>/{self.cfg.song_dir}/")
+            try:
+                path = core.save_config(self.cfg)
+                self._log("dim", f"Saved to {path}")
+            except OSError as exc:
+                self._log("warn", f"Could not save the layout: {exc}")
+            messagebox.showinfo(
+                core.APP_NAME,
+                "Layout detected and saved:\n\n"
+                f"  root prefix : {self.cfg.root_prefix or '(bucket root)'}\n"
+                f"  DLC folder  : {self.cfg.dlc_dir or '(none)'}\n"
+                f"  song folder : {self.cfg.song_dir}\n\n"
+                "Reloading the list now.")
+            self.connect(silent=True)
             return
 
         if kind == "scan_start":

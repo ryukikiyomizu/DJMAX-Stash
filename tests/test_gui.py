@@ -386,6 +386,45 @@ class GuiTestCase(unittest.TestCase):
         self.assertIn("Connection failed", self.app.status.label.cget("text"))
         self.assertTrue(self.app.connection.visible, "connection bar should reopen to be fixed")
 
+    def test_detect_layout_button_fixes_a_wrong_layout(self):
+        """A friend with a different folder layout shouldn't have to edit JSON."""
+        self.pump(lambda: len(self.app.dlcs) == 3, what="scan")
+        DIALOGS.reset()
+        self.app.cfg.save_path = str(self.tmp / "detect-config.json")
+
+        # sabotage the layout, then let the button work it out again
+        self.app.cfg.root_prefix = "wrong/"
+        self.app.cfg.dlc_dir = "Nope"
+        self.app.connection.setup(self.app.cfg)
+        self.app._detect_layout(self.worker.url, TOKEN)
+
+        self.pump(lambda: any(kind == "info" for kind, *_ in DIALOGS.all_calls)
+                  or DIALOGS.showwarning.calls, seconds=30, what="detection to report")
+        self.assertFalse(DIALOGS.showwarning.calls, DIALOGS.showwarning.calls)
+        self.assertEqual(self.app.cfg.root_prefix, "djmax/")
+        self.assertEqual(self.app.cfg.dlc_dir, "By_DLC")
+        self.assertEqual(self.app.cfg.song_dir, "Songs")
+
+        # it saved the result and reloaded with the corrected layout
+        saved = Path(self.app.cfg.save_path)
+        self.assertTrue(saved.exists(), "detected layout should be persisted")
+        self.assertIn("By_DLC", saved.read_text())
+
+        self.wait_idle()
+        self.pump(lambda: len(self.app.dlcs) == 3, seconds=30, what="reload after detection")
+        self.assertIn("Arcaea", self.tree_text())
+
+    def test_detect_layout_reports_failure_clearly(self):
+        self.pump(lambda: len(self.app.dlcs) == 3, what="scan")
+        DIALOGS.reset()
+        self.app.cfg.save_path = str(self.tmp / "detect-config2.json")
+        self.app._detect_layout(self.worker.url, "definitely-wrong-token")
+        self.pump(lambda: bool(DIALOGS.showwarning.calls), seconds=30,
+                  what="a failure warning")
+        self.assertIn("Could not work out", DIALOGS.showwarning.calls[0][1])
+        # the previous layout must survive a failed detection
+        self.assertEqual(self.app.cfg.dlc_dir, "By_DLC")
+
     def test_song_without_chart_folder_is_flagged_and_falls_back(self):
         # Remove a chart folder from the bucket, then rescan.
         victim = self.bucket / "djmax/By_DLC/Deemo/Songs/Nine Point Eight [113]/Chart and OGG"
