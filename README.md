@@ -48,25 +48,33 @@ already shared with them.
 
 ## Connecting the app to your Cloudflare (2 minutes)
 
+**Full walkthrough, including a no-terminal dashboard route:
+[CONNECTING.md](CONNECTING.md).** The short version:
+
 You need three things, then it's a copy-paste:
 
 **1. Deploy the Worker** (this is the only part with a terminal):
 
 ```bash
+python djmax_stash_cli.py new-token        # generates a strong token for you
 npm install -g wrangler
 wrangler login
 cd worker
 cp wrangler.toml.example wrangler.toml     # set bucket_name + ALLOWED_PREFIX
 wrangler deploy                            # prints your Worker URL
-wrangler secret put APP_TOKEN              # invent a long random token
+wrangler secret put APP_TOKEN              # paste the generated token
 ```
+
+Everything is also doable from the Cloudflare dashboard with no terminal at all
+— see [CONNECTING.md](CONNECTING.md). One gotcha worth knowing up front:
+Cloudflare never shows a saved secret again, so keep a copy of your token.
 
 **2. Copy the two values** `wrangler` gave you:
 
 | What | Where it comes from | Looks like |
 |---|---|---|
 | API URL | the URL `wrangler deploy` printed | `https://djmax-stash-api.you.workers.dev` |
-| Token | whatever you typed at `wrangler secret put APP_TOKEN` | `k7f2...` (your choice) |
+| Token | whatever you set as the `APP_TOKEN` secret — **you invent it**, Cloudflare never hands you one | `k7f2...` (your choice) |
 
 **3. Paste them into the app**: click **Connection** at the top left → fill in
 API URL and Token → **Test & connect** → **Save to config**. The bar collapses
@@ -172,6 +180,7 @@ at the bucket, then tell you what to put in the config.
 ## Command line (same engine)
 
 ```bash
+python djmax_stash_cli.py new-token                    # generate an APP_TOKEN
 python djmax_stash_cli.py doctor                       # diagnose + detect layout
 python djmax_stash_cli.py list                         # DLCs and sizes
 python djmax_stash_cli.py list --dlc Arcaea --songs    # songs inside a DLC
@@ -220,6 +229,7 @@ djmax_stash.py          GUI (Tkinter) - thin: widgets + event rendering
 stash_tasks.py          background tasks, download plans, event protocol
 stash_core.py           everything else: HTTP client, bucket model, downloader
 djmax_stash_cli.py      command line interface
+CONNECTING.md           how to get the API URL + token out of Cloudflare
 worker/worker.js        Cloudflare Worker (R2 binding, token auth, read-only)
 worker/wrangler.toml.example
 tools/mock_worker.py    local Worker stand-in, same API

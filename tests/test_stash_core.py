@@ -519,6 +519,28 @@ class TestWorkerBehaviour(unittest.TestCase):
 
 
 class TestCliSmoke(unittest.TestCase):
+    def test_new_token_generates_something_usable(self):
+        result = subprocess.run([sys.executable, str(ROOT / "djmax_stash_cli.py"),
+                                 "new-token", "--length", "32"],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # first non-empty line that isn't a label is the token itself
+        token = ""
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line and not line.endswith(":") and " " not in line:
+                token = line
+                break
+        self.assertGreaterEqual(len(token), 32)
+        self.assertIn("APP_TOKEN", result.stdout)
+        self.assertIn("never be read back", result.stdout)
+
+    def test_connecting_guide_exists_and_names_the_two_values(self):
+        guide = (ROOT / "CONNECTING.md").read_text()
+        for needed in ("ALLOWED_PREFIX", "APP_TOKEN", "BUCKET", "workers.dev",
+                       "Bindings", "Variables and Secrets"):
+            self.assertIn(needed, guide, f"CONNECTING.md should mention {needed}")
+
     def test_cli_help_runs(self):
         result = subprocess.run([sys.executable, str(ROOT / "djmax_stash_cli.py"), "--help"],
                                 capture_output=True, text=True, timeout=60)

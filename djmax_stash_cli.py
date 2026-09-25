@@ -300,6 +300,26 @@ def cmd_folder(args):
     return run_download(cfg, items, f"Folder {prefix}", quiet=args.quiet)
 
 
+def cmd_new_token(args):
+    """Generate a strong APP_TOKEN to paste into Cloudflare."""
+    import secrets as _secrets
+
+    token = _secrets.token_urlsafe(args.length)[:args.length]
+    print("Your new APP_TOKEN:\n")
+    print(f"  {token}\n")
+    print("Put it into the Worker (pick whichever you prefer):\n")
+    print("  dashboard : Workers & Pages -> your Worker -> Settings")
+    print("              -> Variables and Secrets -> Add -> Secret")
+    print("              -> Variable name: APP_TOKEN -> Value: the token above -> Save\n")
+    print(f"  terminal  : cd worker && wrangler secret put APP_TOKEN   (then paste it)\n")
+    print("Then paste the same string into the app's Connection bar, or:\n")
+    print(f"  python djmax_stash_cli.py doctor --api-url https://YOUR-WORKER.workers.dev "
+          f"--token {token}\n")
+    print("Note: Cloudflare hides secret values after saving - they can never be read back,")
+    print("so keep a copy. Losing it only means setting a new one; there is nothing to recover.")
+    return 0
+
+
 def cmd_doctor(args):
     cfg = build_config(args)
     print(f"API URL     : {cfg.api_url or '(not set)'}")
@@ -410,6 +430,11 @@ def main(argv=None) -> int:
     common_args(p_folder)
     p_folder.add_argument("prefix", help="bucket path, e.g. djmax/By_DLC/Arcaea/Gears")
     p_folder.set_defaults(func=cmd_folder)
+
+    p_token = sub.add_parser("new-token", help="generate a strong APP_TOKEN to use in Cloudflare")
+    p_token.add_argument("--length", type=int, default=43,
+                         help="token length; use >=40 (default: 43)")
+    p_token.set_defaults(func=cmd_new_token)
 
     p_doctor = sub.add_parser("doctor", help="diagnose connection and bucket layout")
     common_args(p_doctor)
