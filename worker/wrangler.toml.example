@@ -1,0 +1,21 @@
+# wrangler.toml - copy to wrangler.toml and fill in, then `wrangler deploy`
+name = "djmax-stash-api"
+main = "worker.js"
+compatibility_date = "2024-11-06"
+
+# Your R2 bucket.  Create the bucket first:
+#   wrangler r2 bucket create djmax-stash
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "djmax-stash"
+
+[vars]
+# Nothing outside this prefix is ever reachable through this Worker.
+ALLOWED_PREFIX = "djmax/"
+# Leave false so the app can never modify your stash.
+ALLOW_DELETE = "false"
+# "*" is fine for a desktop client (it does not send an Origin header).
+ALLOWED_ORIGINS = "*"
+
+# Set the token as a SECRET, never in this file:
+#   wrangler secret put APP_TOKEN

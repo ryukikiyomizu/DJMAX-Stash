@@ -1,0 +1,16 @@
+{
+  "_comment": "Copy to config.json next to djmax_stash.py. Every key is optional; the GUI Settings dialog writes the first two for you.",
+
+  "api_url": "https://djmax-stash-api.YOUR-SUBDOMAIN.workers.dev",
+  "token": "paste-the-APP_TOKEN-you-set-with-wrangler-secret-put",
+
+  "root_prefix": "djmax/",
+  "dlc_dir": "By_DLC",
+  "song_dir": "Songs",
+  "chart_dirs": ["Chart and OGG", "Chart & OGG", "Chart+OGG", "Chart_OGG"],
+
+  "output_dir": "DJMAX Stash",
+  "workers": 4,
+  "verify_md5": true,
+  "resume": true
+}

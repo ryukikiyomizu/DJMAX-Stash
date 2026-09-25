@@ -1,0 +1,22 @@
+# ---- secrets / local config (never commit) ---------------------------------
+config.json
+stash_config.json
+*.local.json
+
+# ---- demo data -------------------------------------------------------------
+tools/demo_bucket/
+
+# ---- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- packaging -------------------------------------------------------------
+build/
+dist/
+*.spec
+*.zip
