@@ -22,6 +22,22 @@ python djmax_stash_cli.py new-token
 
 ---
 
+## Which storage service? R2, not KV
+
+Cloudflare has several lookalike entries in the sidebar. For this app the files
+must live in **R2 Object Storage**:
+
+| Service | What it's for | Use it here? |
+|---|---|---|
+| **R2 Object Storage** | files and blobs of any size, no egress fees | **yes — this is where your songs go** |
+| Workers KV | small key-value data (config, flags); 25 MB per value | no — cannot hold songs |
+| D1 / PostgreSQL | SQL databases | no |
+| Images & Stream | Cloudflare's image/video products | no |
+
+If you don't see your `djmax/…` files listed under **R2 Object Storage**, the app
+has nothing to read yet — upload the tree there first (drag and drop works, or
+`npx wrangler r2 object put`).
+
 ## Route A — dashboard only (no terminal)
 
 You need: a Cloudflare account with R2 activated, and the name of your bucket.
