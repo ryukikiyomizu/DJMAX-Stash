@@ -47,8 +47,11 @@ Dashboard → **R2 object storage** → the bucket holding your `djmax/…` file
 Write down its exact name.
 
 **2. Create the Worker**
-**Workers & Pages** → **Create** → **Worker** → **Create Worker** → give it a
-name (e.g. `djmax-stash-api`) → **Deploy**.
+**Workers & Pages** → **Create** → on the "Make something new" screen pick
+**Start with Hello World!** (not GitHub, not a template, not static files, and
+not "Continue to Pages") → name it e.g. `djmax-stash-api` → **Deploy**.
+
+That name becomes part of your URL: `https://djmax-stash-api.<your-subdomain>.workers.dev`.
 
 **3. Paste in the code**
 On the Worker's page → **Edit code** → select everything in the editor and
@@ -83,6 +86,18 @@ pick a subdomain first (it's free).
 **7. Paste both into the app**
 **Connection** (top-left) → API URL + Token → **Test & connect** → **Save to
 config**. Status dot goes green: `Connected - N DLC(s)`.
+
+### Checkpoint: the URL tells you which step is missing
+
+Open your Worker URL in a browser after each step. The JSON you get back tells
+you exactly where you are — each message below is *good news* for that stage:
+
+| You see | Meaning | Do next |
+|---|---|---|
+| `{"error":"R2 binding BUCKET is missing…"}` | code is deployed and running | step 4 (add the R2 binding) |
+| `{"error":"Bad or missing token"}` | binding works; auth is guarding correctly | step 5 (add `APP_TOKEN`), then step 7 |
+| `pong`/HTML/anything about a hello world | the sample code is still in place | step 3 (paste `worker.js`) |
+| Cloudflare error 1042 / "not found" page | the Worker isn't deployed yet | step 2 |
 
 ---
 

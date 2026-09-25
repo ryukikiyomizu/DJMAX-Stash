@@ -538,7 +538,8 @@ class TestCliSmoke(unittest.TestCase):
     def test_connecting_guide_exists_and_names_the_two_values(self):
         guide = (ROOT / "CONNECTING.md").read_text()
         for needed in ("ALLOWED_PREFIX", "APP_TOKEN", "BUCKET", "workers.dev",
-                       "Bindings", "Variables and Secrets"):
+                       "Bindings", "Variables and Secrets",
+                       "Start with Hello World!", "Bad or missing token"):
             self.assertIn(needed, guide, f"CONNECTING.md should mention {needed}")
 
     def test_cli_help_runs(self):
